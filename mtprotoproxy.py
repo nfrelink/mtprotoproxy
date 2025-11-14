@@ -1922,21 +1922,28 @@ async def get_encrypted_cert(host, port, server_name):
     if record2_type != 20:
         return b""
 
-    record3_type, record3 = await get_tls_record(reader)
-    if record3_type != 23:
+    cert_data = b""
+    max_records = 10
+    records_read = 0
+    
+    while len(cert_data) < MIN_CERT_LEN and records_read < max_records:
+        record_type, record = await get_tls_record(reader)
+        if record_type == 0:
+            break
+        
+        if record_type == 23:
+            cert_data += record
+        elif record_type in (20, 22):
+            continue
+        else:
+            continue
+        
+        records_read += 1
+    
+    if len(cert_data) < MIN_CERT_LEN:
         return b""
-
-    if len(record3) < MIN_CERT_LEN:
-        record4_type, record4 = await get_tls_record(reader)
-        if record4_type != 23:
-            return b""
-        msg = ("The MASK_HOST %s sent some TLS record before certificate record, this makes the " +
-               "proxy more detectable") % config.MASK_HOST
-        print_err(msg)
-
-        return record4
-
-    return record3
+    
+    return cert_data
 
 
 async def get_mask_host_cert_len():
@@ -1956,8 +1963,8 @@ async def get_mask_host_cert_len():
             cert = await asyncio.wait_for(task, timeout=GET_CERT_TIMEOUT)
             if cert:
                 if len(cert) < MIN_CERT_LEN:
-                    msg = ("The MASK_HOST %s returned several TLS records, this is not supported" %
-                           config.MASK_HOST)
+                    msg = ("The MASK_HOST %s returned insufficient certificate data (got %d bytes, need %d)" %
+                           (config.MASK_HOST, len(cert), MIN_CERT_LEN))
                     print_err(msg)
                 elif len(cert) != fake_cert_len:
                     fake_cert_len = len(cert)
@@ -1996,7 +2003,7 @@ async def get_srv_time():
                     continue
                 line = line[len("Date: "):].decode()
                 srv_time = datetime.datetime.strptime(line, "%a, %d %b %Y %H:%M:%S %Z")
-                now_time = datetime.datetime.utcnow()
+                now_time = datetime.datetime.now(datetime.timezone.utc)
                 is_time_skewed = (now_time-srv_time).total_seconds() > MAX_TIME_SKEW
                 if is_time_skewed and config.USE_MIDDLE_PROXY and not disable_middle_proxy:
                     print_err("Time skew detected, please set the clock")
