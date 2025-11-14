@@ -112,8 +112,8 @@ def init_config():
         # undocumented way of launching
         conf_dict = {}
         conf_dict["PORT"] = int(sys.argv[1])
-        secrets = sys.argv[2].split(",")
-        conf_dict["USERS"] = {"user%d" % i: secrets[i].zfill(32) for i in range(len(secrets))}
+        secret_list = sys.argv[2].split(",")
+        conf_dict["USERS"] = {"user%d" % i: secret_list[i].zfill(32) for i in range(len(secret_list))}
         conf_dict["MODES"] = {"classic": False, "secure": True, "tls": True}
         if len(sys.argv) > 3:
             conf_dict["AD_TAG"] = sys.argv[3]
