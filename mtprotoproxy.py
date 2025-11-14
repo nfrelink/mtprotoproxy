@@ -1360,7 +1360,7 @@ async def do_direct_handshake(proto_tag, dc_idx, dec_key_and_iv=None):
         print_err("Got connection refused while trying to connect to", dc, TG_DATACENTER_PORT)
         return False
     except ConnectionAbortedError as E:
-        print_err("The Telegram server connection is bad: %d (%s %s) %s" % (dc_idx, addr, port, E))
+        print_err("The Telegram server connection is bad: %d %s" % (dc_idx, E))
         return False
     except (OSError, asyncio.TimeoutError) as E:
         print_err("Unable to connect to", dc, TG_DATACENTER_PORT)
