@@ -11,6 +11,7 @@ import hmac
 import base64
 import hashlib
 import random
+import secrets
 import binascii
 import sys
 import re
@@ -86,7 +87,7 @@ client_ips = collections.OrderedDict()
 last_client_ips = {}
 disable_middle_proxy = False
 is_time_skewed = False
-fake_cert_len = random.randrange(1024, 4096)
+fake_cert_len = secrets.randbelow(4096 - 1024) + 1024
 mask_host_cached_ip = None
 last_clients_with_time_skew = {}
 last_clients_with_same_handshake = collections.Counter()
@@ -244,7 +245,7 @@ def init_config():
     conf_dict.setdefault("GET_TIME_PERIOD", 10*60)
 
     # delay in seconds between getting the length of certificate on the mask host
-    conf_dict.setdefault("GET_CERT_LEN_PERIOD", random.randrange(4*60*60, 6*60*60))
+    conf_dict.setdefault("GET_CERT_LEN_PERIOD", secrets.randbelow(2*60*60) + 4*60*60)
 
     # max socket buffer size to the client direction, the more the faster, but more RAM hungry
     # can be the tuple (low, users_margin, high) for the adaptive case. If no much users, use high
@@ -257,7 +258,7 @@ def init_config():
     conf_dict.setdefault("CLIENT_KEEPALIVE", 10*60)
 
     # drop client after this timeout if the handshake fail
-    conf_dict.setdefault("CLIENT_HANDSHAKE_TIMEOUT", random.randrange(5, 15))
+    conf_dict.setdefault("CLIENT_HANDSHAKE_TIMEOUT", secrets.randbelow(10) + 5)
 
     # if client doesn't confirm data for this number of seconds, it is dropped
     conf_dict.setdefault("CLIENT_ACK_TIMEOUT", 5*60)
@@ -458,8 +459,8 @@ def get_to_clt_bufsize():
 class MyRandom(random.Random):
     def __init__(self):
         super().__init__()
-        key = bytes([random.randrange(256) for i in range(32)])
-        iv = random.randrange(256**16)
+        key = secrets.token_bytes(32)
+        iv = secrets.randbits(128)
 
         self.encryptor = create_aes_ctr(key, iv)
         self.buffer = bytearray()
@@ -2168,7 +2169,7 @@ def print_tg_info():
                       "00000000000000000000000000000001"]:
             msg = "The default secret {} is used, this is not recommended".format(secret)
             print(msg, flush=True)
-            random_secret = "".join(myrandom.choice("0123456789abcdef") for i in range(32))
+            random_secret = secrets.token_hex(16)
             print("You can change it to this random secret:", random_secret, flush=True)
             print_default_warning = True
 
