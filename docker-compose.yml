@@ -9,3 +9,7 @@ services:
       - ./config.py:/home/tgproxy/config.py
       - ./mtprotoproxy.py:/home/tgproxy/mtprotoproxy.py
       - /etc/localtime:/etc/localtime:ro
+
+networks:
+  default:
+    enable_ipv6: true
