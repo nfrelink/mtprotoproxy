@@ -19,6 +19,6 @@ WORKDIR /home/tgproxy/
 COPY --chown=tgproxy mtprotoproxy.py config.py /home/tgproxy/
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
-  CMD python3 -c "import runpy, socket; config=runpy.run_module('config'); port=config.get('PORT', 443); s=socket.socket(); s.bind(('127.0.0.1', port)); s.close()" || exit 1
+  CMD python3 -c "import runpy, socket; config=runpy.run_module('config'); port=config.get('PORT', 443); s=socket.create_connection(('127.0.0.1', port), timeout=5); s.close()" || exit 1
 
 CMD ["python3", "mtprotoproxy.py"]
