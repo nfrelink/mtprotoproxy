@@ -217,10 +217,16 @@ def init_config():
     conf_dict.setdefault("USER_MAX_TCP_CONNS", {})
 
     # expiration date for users in format of day/month/year
-    conf_dict.setdefault("USER_EXPIRATIONS", {})
-    for user in conf_dict["USER_EXPIRATIONS"]:
-        expiration = datetime.datetime.strptime(conf_dict["USER_EXPIRATIONS"][user], "%d/%m/%Y")
-        conf_dict["USER_EXPIRATIONS"][user] = expiration
+    user_expirations = {}
+    for user, expires_on in conf_dict.setdefault("USER_EXPIRATIONS", {}).items():
+        try:
+            expiration = datetime.datetime.strptime(expires_on, "%d/%m/%Y")
+        except ValueError:
+            print_err("Invalid expiration date '%s' for user %s, skipping this limit" %
+                      (expires_on, user))
+            continue
+        user_expirations[user] = expiration
+    conf_dict["USER_EXPIRATIONS"] = user_expirations
 
     # the data quota for user
     conf_dict.setdefault("USER_DATA_QUOTA", {})
@@ -658,7 +664,11 @@ class CryptoWrappedStreamReader(LayeredStreamReaderBase):
 
             needed_till_full_block = -len(data) % self.block_size
             if needed_till_full_block > 0:
-                data += self.upstream.readexactly(needed_till_full_block)
+                try:
+                    extra = await self.upstream.readexactly(needed_till_full_block)
+                except asyncio.IncompleteReadError:
+                    return b""
+                data += extra
             return self.decryptor.decrypt(data)
 
     async def readexactly(self, n):
@@ -2108,11 +2118,11 @@ def init_ip_info():
         except Exception:
             return None
 
-    IPV4_URL1 = "http://v4.ident.me/"
-    IPV4_URL2 = "http://ipv4.icanhazip.com/"
+    IPV4_URL1 = "https://v4.ident.me/"
+    IPV4_URL2 = "https://ipv4.icanhazip.com/"
 
-    IPV6_URL1 = "http://v6.ident.me/"
-    IPV6_URL2 = "http://ipv6.icanhazip.com/"
+    IPV6_URL1 = "https://v6.ident.me/"
+    IPV6_URL2 = "https://ipv6.icanhazip.com/"
 
     my_ip_info["ipv4"] = get_ip_from_url(IPV4_URL1) or get_ip_from_url(IPV4_URL2)
     my_ip_info["ipv6"] = get_ip_from_url(IPV6_URL1) or get_ip_from_url(IPV6_URL2)
