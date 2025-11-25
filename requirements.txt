@@ -1,0 +1,3 @@
+cryptography
+uvloop
+PySocks
