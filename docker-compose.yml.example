@@ -2,12 +2,12 @@ services:
   mtprotoproxy:
     build: .
     restart: unless-stopped
+    container_name: mtprotoproxy
     ports:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./config.py:/home/tgproxy/config.py
-      - ./mtprotoproxy.py:/home/tgproxy/mtprotoproxy.py
+      - ./config.py:/home/tgproxy/config.py:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
       - INSTANCES=1
