@@ -1,23 +1,18 @@
-FROM python:3.12-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    build-essential \
-    libffi-dev \
-    libssl-dev \
+    python3 \
+    python3-uvloop \
+    python3-cryptography \
+    python3-socks \
     libcap2-bin \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && setcap -r /usr/local/bin/python3.12 2>/dev/null || true \
-    && setcap cap_net_bind_service=+ep /usr/local/bin/python3.12 \
+    && setcap -r /usr/bin/python3.12 2>/dev/null || true \
+    && setcap cap_net_bind_service=+ep /usr/bin/python3.12 \
     && useradd tgproxy -u 10000
 
 WORKDIR /home/tgproxy/
-
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY --chown=tgproxy . /home/tgproxy/
 RUN test -f config.py
