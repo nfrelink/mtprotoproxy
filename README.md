@@ -24,8 +24,8 @@ the VDS instance with 1 CPU core and 1024MB RAM.
 
 ## More Instructions ##
 
-- [Running without Docker](https://github.com/nfrelink/mtprotoproxy/wiki/Running-Without-Docker)
-- [Optimization and fine tuning](https://github.com/nfrelink/mtprotoproxy/wiki/Optimization-and-Fine-Tuning)
+- [Running without Docker](https://github.com/alexbers/mtprotoproxy/wiki/Running-Without-Docker)
+- [Optimization and fine tuning](https://github.com/alexbers/mtprotoproxy/wiki/Optimization-and-Fine-Tuning)
 
 ## Advanced Usage ##
 
