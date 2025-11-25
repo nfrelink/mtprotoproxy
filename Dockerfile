@@ -22,9 +22,13 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY --chown=tgproxy . /home/tgproxy/
 RUN test -f config.py
 
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 USER tgproxy
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=10s \
   CMD python3 -c "import runpy, socket; config=runpy.run_module('config'); port=config.get('PORT', 443); s=socket.create_connection(('127.0.0.1', port), timeout=5); s.close()" || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python3", "mtprotoproxy.py"]
