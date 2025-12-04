@@ -139,6 +139,10 @@ def init_config():
 
     # use middle proxy, necessary to show ad
     conf_dict.setdefault("USE_MIDDLE_PROXY", len(conf_dict["AD_TAG"]) == 16)
+    # number of times to retry middle proxy handshake before giving up
+    conf_dict.setdefault("MIDDLE_PROXY_MAX_RETRIES", 3)
+    # fallback to direct DC connection if all middle proxies fail
+    conf_dict.setdefault("MIDDLE_PROXY_DIRECT_FALLBACK", False)
 
     # if IPv6 avaliable, use it by default
     conf_dict.setdefault("PREFER_IPV6", socket.has_ipv6)
@@ -245,6 +249,12 @@ def init_config():
 
     # delay in seconds between middle proxy info updates
     conf_dict.setdefault("PROXY_INFO_UPDATE_PERIOD", 24*60*60)
+
+    # how many different middle proxies to try per connection (0 means try all)
+    conf_dict.setdefault("MIDDLE_PROXY_MAX_RETRIES", 3)
+
+    # fallback to a direct DC connection when all middle proxies fail
+    conf_dict.setdefault("MIDDLE_PROXY_DIRECT_FALLBACK", False)
 
     # delay in seconds between time getting, zero means disabled
     conf_dict.setdefault("GET_TIME_PERIOD", 10*60)
@@ -1553,26 +1563,41 @@ async def do_middleproxy_handshake(proto_tag, dc_idx, cl_ip, cl_port):
 
     use_ipv6_tg = (my_ip_info["ipv6"] and (config.PREFER_IPV6 or not my_ip_info["ipv4"]))
 
-    if use_ipv6_tg:
-        if dc_idx not in TG_MIDDLE_PROXIES_V6:
-            return False
-        addr, port = myrandom.choice(TG_MIDDLE_PROXIES_V6[dc_idx])
-    else:
-        if dc_idx not in TG_MIDDLE_PROXIES_V4:
-            return False
-        addr, port = myrandom.choice(TG_MIDDLE_PROXIES_V4[dc_idx])
+    proxy_pool = TG_MIDDLE_PROXIES_V6 if use_ipv6_tg else TG_MIDDLE_PROXIES_V4
+    proxies = proxy_pool.get(dc_idx)
+    if not proxies:
+        return False
 
-    try:
-        ret = await tg_connection_pool.get_connection(addr, port, middleproxy_handshake)
-        reader_tgt, writer_tgt, my_ip, my_port = ret
-    except ConnectionRefusedError as E:
-        print_err("The Telegram server %d (%s %s) is refusing connections" % (dc_idx, addr, port))
-        return False
-    except ConnectionAbortedError as E:
-        print_err("The Telegram server connection is bad: %d (%s %s) %s" % (dc_idx, addr, port, E))
-        return False
-    except (OSError, asyncio.TimeoutError) as E:
-        print_err("Unable to connect to the Telegram server %d (%s %s)" % (dc_idx, addr, port))
+    proxies = list(proxies)
+    myrandom.shuffle(proxies)
+
+    max_attempts = config.MIDDLE_PROXY_MAX_RETRIES
+    if max_attempts <= 0 or max_attempts > len(proxies):
+        max_attempts = len(proxies)
+
+    last_error = None
+
+    for attempt in range(max_attempts):
+        addr, port = proxies[attempt]
+        try:
+            ret = await tg_connection_pool.get_connection(addr, port, middleproxy_handshake)
+            reader_tgt, writer_tgt, my_ip, my_port = ret
+            break
+        except ConnectionRefusedError as E:
+            last_error = E
+            print_err("Middle proxy %d (%s %s) refused connection, attempt %d/%d" %
+                      (dc_idx, addr, port, attempt+1, max_attempts))
+        except ConnectionAbortedError as E:
+            last_error = E
+            print_err("Middle proxy %d (%s %s) aborted connection: %s (attempt %d/%d)" %
+                      (dc_idx, addr, port, E, attempt+1, max_attempts))
+        except (OSError, asyncio.TimeoutError) as E:
+            last_error = E
+            print_err("Unable to reach middle proxy %d (%s %s), attempt %d/%d" %
+                      (dc_idx, addr, port, attempt+1, max_attempts))
+    else:
+        if last_error:
+            print_err("All middle proxy attempts failed for dc %d: %s" % (dc_idx, last_error))
         return False
 
     writer_tgt = ProxyReqStreamWriter(writer_tgt, cl_ip, cl_port, my_ip, my_port, proto_tag)
@@ -1632,15 +1657,22 @@ async def handle_client(reader_clt, writer_clt):
 
     update_user_stats(user, connects=1)
 
+    async def connect_direct():
+        if config.FAST_MODE:
+            return await do_direct_handshake(proto_tag, dc_idx, dec_key_and_iv=enc_key_and_iv)
+        return await do_direct_handshake(proto_tag, dc_idx)
+
     connect_directly = (not config.USE_MIDDLE_PROXY or disable_middle_proxy)
+    tg_data = None
 
     if connect_directly:
-        if config.FAST_MODE:
-            tg_data = await do_direct_handshake(proto_tag, dc_idx, dec_key_and_iv=enc_key_and_iv)
-        else:
-            tg_data = await do_direct_handshake(proto_tag, dc_idx)
+        tg_data = await connect_direct()
     else:
         tg_data = await do_middleproxy_handshake(proto_tag, dc_idx, cl_ip, cl_port)
+        if (not tg_data and config.MIDDLE_PROXY_DIRECT_FALLBACK and
+                not disable_middle_proxy):
+            print_err("Middle proxy failed for dc %d, falling back to direct connection" % dc_idx)
+            tg_data = await connect_direct()
 
     if not tg_data:
         return
