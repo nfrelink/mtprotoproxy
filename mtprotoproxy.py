@@ -1257,6 +1257,9 @@ async def handle_handshake(reader, writer):
     global last_clients_with_same_handshake
 
     TLS_START_BYTES = b"\x16\x03\x01"
+    TLS_RECORD_HEADER_LEN = 5
+    TLS_MIN_HANDSHAKE_LEN = 512
+    TLS_MAX_HANDSHAKE_LEN = 16384
 
     if writer.transport.is_closing() or writer.get_extra_info("peername") is None:
         return False
@@ -1273,19 +1276,17 @@ async def handle_handshake(reader, writer):
             await handle_bad_client(reader, writer, None)
             return False
 
-    is_tls_handshake = True
-    handshake = b""
-    for expected_byte in TLS_START_BYTES:
-        handshake += await reader.readexactly(1)
-        if handshake[-1] != expected_byte:
-            is_tls_handshake = False
-            break
+    # Parse the TLS record header explicitly to avoid endianness/punning issues.
+    handshake = await reader.readexactly(TLS_RECORD_HEADER_LEN)
+    tls_rec_type, tls_ver_major, tls_ver_minor, tls_len_msb, tls_len_lsb = handshake
+    tls_handshake_len = (tls_len_msb << 8) | tls_len_lsb
 
-    if is_tls_handshake:
-        handshake += await reader.readexactly(2)
-        tls_handshake_len = int.from_bytes(handshake[-2:], "big")
-        if tls_handshake_len < 512:
-            is_tls_handshake = False
+    is_tls_handshake = (
+        tls_rec_type == TLS_START_BYTES[0]
+        and tls_ver_major == TLS_START_BYTES[1]
+        and tls_ver_minor == TLS_START_BYTES[2]
+        and TLS_MIN_HANDSHAKE_LEN <= tls_handshake_len <= TLS_MAX_HANDSHAKE_LEN
+    )
 
     if is_tls_handshake:
         handshake += await reader.readexactly(tls_handshake_len)
