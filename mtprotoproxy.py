@@ -290,6 +290,9 @@ def init_config():
     # listen unix socket
     conf_dict.setdefault("LISTEN_UNIX_SOCK", "")
 
+    # unix socket permissions (0o666 = world accessible, 0o660 = owner/group only)
+    conf_dict.setdefault("LISTEN_UNIX_SOCK_MODE", 0o666)
+
     # prometheus exporter listen port, use some random port here
     conf_dict.setdefault("METRICS_PORT", None)
 
@@ -356,20 +359,6 @@ def try_use_cryptography_module():
     return create_aes_ctr, create_aes_cbc
 
 
-def try_use_pycrypto_or_pycryptodome_module():
-    from Crypto.Cipher import AES
-    from Crypto.Util import Counter
-
-    def create_aes_ctr(key, iv):
-        ctr = Counter.new(128, initial_value=iv)
-        return AES.new(key, AES.MODE_CTR, counter=ctr)
-
-    def create_aes_cbc(key, iv):
-        return AES.new(key, AES.MODE_CBC, iv)
-
-    return create_aes_ctr, create_aes_cbc
-
-
 def use_slow_bundled_cryptography_module():
     import pyaes
 
@@ -404,10 +393,7 @@ def use_slow_bundled_cryptography_module():
 try:
     create_aes_ctr, create_aes_cbc = try_use_cryptography_module()
 except ImportError:
-    try:
-        create_aes_ctr, create_aes_cbc = try_use_pycrypto_or_pycryptodome_module()
-    except ImportError:
-        create_aes_ctr, create_aes_cbc = use_slow_bundled_cryptography_module()
+    create_aes_ctr, create_aes_cbc = use_slow_bundled_cryptography_module()
 
 
 def print_err(*params):
@@ -2144,6 +2130,9 @@ def init_ip_info():
     def get_ip_from_url(url):
         TIMEOUT = 5
         try:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                raise ValueError("Only http/https schemes are allowed")
             with urllib.request.urlopen(url, timeout=TIMEOUT) as f:
                 if f.status != 200:
                     raise Exception("Invalid status code")
@@ -2343,7 +2332,7 @@ def create_servers(loop):
         task = asyncio.start_unix_server(handle_client_wrapper, config.LISTEN_UNIX_SOCK,
                                          limit=get_to_tg_bufsize())
         servers.append(loop.run_until_complete(task))
-        os.chmod(config.LISTEN_UNIX_SOCK, 0o666)
+        os.chmod(config.LISTEN_UNIX_SOCK, config.LISTEN_UNIX_SOCK_MODE)
 
     if config.METRICS_PORT is not None:
         if config.METRICS_LISTEN_ADDR_IPV4:
