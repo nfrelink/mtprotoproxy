@@ -2133,7 +2133,7 @@ def init_ip_info():
             parsed = urllib.parse.urlparse(url)
             if parsed.scheme not in ("http", "https"):
                 raise ValueError("Only http/https schemes are allowed")
-            with urllib.request.urlopen(url, timeout=TIMEOUT) as f:
+            with urllib.request.urlopen(url, timeout=TIMEOUT) as f:  # nosec B310
                 if f.status != 200:
                     raise Exception("Invalid status code")
                 return f.read().decode().strip()
